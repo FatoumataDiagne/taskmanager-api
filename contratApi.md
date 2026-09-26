@@ -74,29 +74,28 @@ une fois archivé, sans supprimer les données.
 ## Question 5 — Modèle de données
 
 **Entités et cardinalités :**
-- `User (1) —— owns —— (N) Workspace` : un utilisateur peut posséder plusieurs workspaces.
-- `User (N) —— member of —— (N) Workspace` via la table d'association `WorkspaceMember`
-  (colonnes : `workspace_id`, `user_id`, `role` avec `owner`/`member` — ce sont les deux
-  rôles aux permissions distinctes exigés par le cahier des charges : `owner` peut
-  gérer les membres et supprimer le workspace, `member` peut seulement lire/écrire sur
-  les projets).
-- `Workspace (1) —— (N) Project` (FK `Project.workspace_id`).
-- `Project (1) —— (N) Column` (FK `Column.project_id`).
-- `Column (1) —— (N) Task` (FK `Task.column_id`).
-- `User (1) —— (N) Task` en tant qu'assigné, optionnel (FK `Task.assignee_id`, nullable).
+
+| Relation | Cardinalité | Détail |
+|---|---|---|
+| `User` → `Workspace` | 1 — N | Un utilisateur peut posséder plusieurs workspaces (`Workspace.owner_id`) |
+| `User` ↔ `Workspace` | N — N | Table d'association `WorkspaceMember` (`workspace_id`, `user_id`, `role`) |
+| `Workspace` → `Project` | 1 — N | FK `Project.workspace_id` |
+| `Project` → `Column` | 1 — N | FK `Column.project_id` |
+| `Column` → `Task` | 1 — N | FK `Task.column_id` |
+| `User` → `Task` (assigné) | 1 — N, optionnel | FK `Task.assignee_id`, nullable |
+
+Le champ `role` de `WorkspaceMember` (`owner` / `member`) porte les deux rôles aux
+permissions distinctes exigés par le cahier des charges : `owner` peut gérer les
+membres et supprimer le workspace, `member` peut seulement lire/écrire sur les projets.
 
 **Lazy vs eager :**
-- `Workspace.members` et `Workspace.projects` : **lazy** (`lazy="select"`, chargé à la
-  demande). Ces listes peuvent être longues et ne sont utiles que sur les endpoints qui
-  les affichent explicitement (`GET /workspaces/<id>/members`, `GET /workspaces/<id>/projects`) —
-  les charger systématiquement gaspillerait des requêtes sur tous les autres endpoints.
-- `Project.columns` et `Column.tasks` sur l'endpoint "board" (`GET /projects/<id>/board`,
-  bonus pratique pour l'affichage Kanban) : **eager** (`joinedload` ciblé dans le
-  service, pas sur la relation par défaut) pour éviter le N+1 quand on doit tout
-  afficher d'un coup. Ailleurs (ex. `GET /columns/<id>` seul), la relation reste lazy.
-- `Task.assignee` : **lazy**, chargé seulement si le schéma de sortie a besoin du nom
-  de l'assigné (jointure ponctuelle plutôt que systématique).
+
+| Relation | Stratégie | Pourquoi |
+|---|---|---|
+| `Workspace.members`, `Workspace.projects` | lazy (`lazy="select"`) | Listes potentiellement longues, utiles seulement sur les endpoints qui les affichent explicitement (`GET /workspaces/<id>/members`, `.../projects`) — les charger partout ailleurs gaspillerait des requêtes |
+| `Project.columns`, `Column.tasks` sur l'endpoint "board" (`GET /projects/<id>/board`) | eager (`joinedload` ciblé dans le service) | Évite le N+1 quand on affiche tout le tableau Kanban d'un coup ; ailleurs (ex. `GET /columns/<id>` seul), la relation reste lazy |
+| `Task.assignee` | lazy | Chargé seulement si le schéma de sortie a besoin du nom de l'assigné — jointure ponctuelle plutôt que systématique |
 
 ## Diagramme entité-relation
 
-Voir le diagramme ci-dessous pour la vue d'ensemble.
+![Diagramme entité-relation du domaine TaskManager](erd.svg)
