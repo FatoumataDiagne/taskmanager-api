@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: taskmanager_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: dev_secret_key
+      JWT_SECRET_KEY: dev_jwt_secret_key
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/taskmanager_db
+      FLASK_CONFIG: prod
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:

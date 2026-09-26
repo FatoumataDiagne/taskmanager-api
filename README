@@ -1,0 +1,110 @@
+# TaskManager API
+
+API REST de gestion de tâches façon Trello/Jira simplifié — projet final du cours
+*Conception d'API REST avec Flask* (Sujet C).
+
+Un utilisateur crée des **workspaces**, y invite des membres, organise des **projets**
+en **colonnes**, et déplace des **tâches** entre ces colonnes. L'accès à un
+workspace est réservé à ses membres ; seul le `owner` d'un workspace peut gérer
+ses membres.
+
+## Stack technique
+
+- Flask 3 (fabrique d'application, blueprints versionnés `/api/v1`)
+- SQLAlchemy + Flask-Migrate (Alembic) — PostgreSQL en développement/production
+- Marshmallow (validation des entrées/sorties)
+- Flask-JWT-Extended (authentification par jeton d'accès + rafraîchissement)
+- Flasgger (documentation OpenAPI / Swagger UI)
+- Flask-Limiter, Flask-Cors (durcissement)
+- pytest + pytest-cov (tests)
+- Gunicorn + Docker (déploiement)
+
+## Installation (sans Docker)
+
+```bash
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
+
+pip install -r requirements.txt
+```
+
+Crée un fichier `.env` à la racine (voir `.env.example`) :
+
+```
+SECRET_KEY=dev_secret_key
+DATABASE_URL=postgresql+psycopg://postgres:TON_MOT_DE_PASSE@localhost:5432/taskmanager_db
+JWT_SECRET_KEY=dev_jwt_secret_key
+```
+
+Crée la base `taskmanager_db` dans PostgreSQL (via pgAdmin ou `psql`), puis :
+
+```bash
+set FLASK_APP=run.py        # Windows (PowerShell : $env:FLASK_APP="run.py")
+flask db upgrade
+flask run
+```
+
+L'API est disponible sur `http://127.0.0.1:5000`.
+
+## Lancement avec Docker
+
+```bash
+docker compose up
+```
+
+Démarre une base PostgreSQL dédiée (conteneur séparé de ta base locale) et l'API,
+en appliquant automatiquement les migrations. L'API est alors sur
+`http://127.0.0.1:5000`. En mode conteneur (`FLASK_CONFIG=prod`), Swagger UI est
+désactivé, conformément à la règle « `DEBUG=False` en production ».
+
+## Documentation de l'API
+
+En mode développement (`flask run`), la documentation interactive est disponible
+sur `http://127.0.0.1:5000/docs/`.
+
+## Tests
+
+```bash
+pytest -v
+pytest --cov=app --cov-report=term-missing
+```
+
+Les tests tournent sur une base SQLite en mémoire dédiée : ils ne touchent jamais
+`taskmanager_db`.
+
+## Structure du projet
+
+```
+app/
+  models/       # Entités SQLAlchemy (User, Workspace, Project, Column, Task)
+  schemas/      # Validation et sérialisation Marshmallow
+  services/     # Logique métier (indépendante de HTTP)
+  routes/       # Blueprints Flask (endpoints /api/v1/...)
+  extensions.py # Instances partagées (db, jwt, cors, limiter...)
+  errors.py     # Gestionnaire d'erreurs JSON global
+  config.py     # Configurations dev / test / prod
+migrations/     # Historique Alembic
+tests/          # Tests pytest (conftest + un fichier par ressource)
+```
+
+## Modèle de permissions
+
+| Rôle | Portée | Peut |
+|---|---|---|
+| `owner` | par workspace | Tout faire sur le workspace : renommer, supprimer, gérer les membres |
+| `member` | par workspace | Voir et gérer les projets/colonnes/tâches du workspace |
+
+Un utilisateur ne peut être assigné à une tâche que s'il est membre du workspace
+concerné (409 sinon).
+
+## Parcours de démonstration
+
+1. `POST /api/v1/auth/register` — créer un compte
+2. `POST /api/v1/auth/login` — récupérer un `access_token`
+3. `POST /api/v1/workspaces` — créer un workspace (devient `owner`)
+4. `POST /api/v1/workspaces/<id>/members` — inviter un second utilisateur
+5. `POST /api/v1/workspaces/<id>/projects` — créer un projet
+6. `POST /api/v1/projects/<id>/columns` — créer les colonnes (ex: To Do, Done)
+7. `POST /api/v1/columns/<id>/tasks` — créer une tâche, l'assigner
+8. `PATCH /api/v1/tasks/<id>` avec `{"column_id": ...}` — déplacer la tâche
