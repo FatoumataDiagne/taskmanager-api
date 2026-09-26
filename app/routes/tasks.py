@@ -1,3 +1,5 @@
+import math
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -74,6 +76,47 @@ def create_task(column_id):
 @tasks_bp.route('/projects/<int:project_id>/tasks', methods=['GET'])
 @jwt_required()
 def list_tasks_in_project(project_id):
+    """
+    Liste les tâches d'un projet, avec filtres, tri et pagination.
+    ---
+    tags: [Tasks]
+    security: [{Bearer: []}]
+    parameters:
+      - in: path
+        name: project_id
+        type: integer
+        required: true
+      - in: query
+        name: column_id
+        type: integer
+      - in: query
+        name: assignee_id
+        type: integer
+      - in: query
+        name: priority
+        type: string
+        enum: [low, medium, high]
+      - in: query
+        name: due_date
+        type: string
+        example: '2026-10-01'
+      - in: query
+        name: sort
+        type: string
+        description: "due_date, priority ou title ; préfixe '-' pour un tri décroissant (ex: -priority)"
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 20
+        description: "maximum 100"
+    responses:
+      200:
+        description: "{'data': [...], 'meta': {'page', 'per_page', 'total', 'total_pages'}}"
+    """
     user_id = int(get_jwt_identity())
     project = ps.get_project_or_404(project_id)
     ws.require_member(project.workspace_id, user_id)
@@ -84,8 +127,20 @@ def list_tasks_in_project(project_id):
         'priority': request.args.get('priority'),
         'due_date': request.args.get('due_date'),  # format YYYY-MM-DD
     }
-    tasks = ts.list_tasks_for_project(project_id, filters)
-    return jsonify(tasks_schema.dump(tasks)), 200
+    page = request.args.get('page', default=1, type=int)
+    per_page = min(request.args.get('per_page', default=20, type=int), 100)
+    sort = request.args.get('sort')
+
+    items, total = ts.list_tasks_for_project(project_id, filters, page=page, per_page=per_page, sort=sort)
+    return jsonify({
+        "data": tasks_schema.dump(items),
+        "meta": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": math.ceil(total / per_page) if per_page else 0,
+        }
+    }), 200
 
 
 @tasks_bp.route('/tasks/<int:task_id>', methods=['GET'])

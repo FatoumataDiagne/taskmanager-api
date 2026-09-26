@@ -76,8 +76,42 @@ def test_filter_tasks_by_priority(client, auth_headers):
 
     r = client.get(f'/api/v1/projects/{pid}/tasks?priority=high', headers=headers)
     assert r.status_code == 200
-    titles = [t['title'] for t in r.get_json()]
+    body = r.get_json()
+    titles = [t['title'] for t in body['data']]
     assert titles == ['Haute']
+    assert body['meta']['total'] == 1
+
+
+def test_pagination_on_tasks(client, auth_headers):
+    headers, _ = auth_headers('alice')
+    _, pid, col_id = _make_column(client, headers)
+    for i in range(5):
+        client.post(f'/api/v1/columns/{col_id}/tasks', json={"title": f"Tâche {i}"}, headers=headers)
+
+    r = client.get(f'/api/v1/projects/{pid}/tasks?page=1&per_page=2', headers=headers)
+    body = r.get_json()
+    assert len(body['data']) == 2
+    assert body['meta'] == {"page": 1, "per_page": 2, "total": 5, "total_pages": 3}
+
+    r = client.get(f'/api/v1/projects/{pid}/tasks?page=3&per_page=2', headers=headers)
+    body = r.get_json()
+    assert len(body['data']) == 1  # dernière page, reste 1 tâche
+
+
+def test_sort_tasks_by_priority(client, auth_headers):
+    headers, _ = auth_headers('alice')
+    _, pid, col_id = _make_column(client, headers)
+    client.post(f'/api/v1/columns/{col_id}/tasks', json={"title": "Basse", "priority": "low"}, headers=headers)
+    client.post(f'/api/v1/columns/{col_id}/tasks', json={"title": "Haute", "priority": "high"}, headers=headers)
+    client.post(f'/api/v1/columns/{col_id}/tasks', json={"title": "Moyenne", "priority": "medium"}, headers=headers)
+
+    r = client.get(f'/api/v1/projects/{pid}/tasks?sort=priority', headers=headers)
+    titles = [t['title'] for t in r.get_json()['data']]
+    assert titles == ['Haute', 'Basse', 'Moyenne']  # ordre alphabétique : high, low, medium
+
+    r = client.get(f'/api/v1/projects/{pid}/tasks?sort=-priority', headers=headers)
+    titles = [t['title'] for t in r.get_json()['data']]
+    assert titles == ['Moyenne', 'Basse', 'Haute']
 
 
 def test_delete_task(client, auth_headers):

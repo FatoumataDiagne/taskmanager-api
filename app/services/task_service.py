@@ -25,8 +25,17 @@ def list_tasks_for_column(column_id):
     return Task.query.filter_by(column_id=column_id).all()
 
 
-def list_tasks_for_project(project_id, filters):
-    """filters : dict optionnel avec column_id, assignee_id, priority, due_date."""
+SORTABLE_FIELDS = {
+    'due_date': Task.due_date,
+    'priority': Task.priority,
+    'title': Task.title,
+}
+
+
+def list_tasks_for_project(project_id, filters, page=1, per_page=20, sort=None):
+    """filters : dict optionnel avec column_id, assignee_id, priority, due_date.
+    sort : nom de champ triable, préfixé de '-' pour un tri décroissant (ex: '-priority').
+    Retourne (items, total)."""
     query = Task.query.join(Column, Task.column_id == Column.id).filter(Column.project_id == project_id)
 
     if filters.get('column_id') is not None:
@@ -38,7 +47,16 @@ def list_tasks_for_project(project_id, filters):
     if filters.get('due_date') is not None:
         query = query.filter(Task.due_date == filters['due_date'])
 
-    return query.all()
+    if sort:
+        descending = sort.startswith('-')
+        field_name = sort.lstrip('-')
+        column = SORTABLE_FIELDS.get(field_name)
+        if column is not None:
+            query = query.order_by(column.desc() if descending else column.asc())
+
+    total = query.count()
+    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    return items, total
 
 
 def create_task(column_id, data):
